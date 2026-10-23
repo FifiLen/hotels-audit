@@ -2,21 +2,43 @@
 import { hero } from '~/data/home'
 
 // Plakat renderuje się od razu (SSR, LCP); wideo dochodzi w przeglądarce i pokazuje się, gdy faktycznie ruszy.
-// Przy prefers-reduced-motion zostaje sam plakat.
+// Przy prefers-reduced-motion i oszczędzaniu danych zostaje sam plakat.
+// Wideo zaczyna się ściągać dopiero po załadowaniu strony (nie konkuruje z plakatem i skryptami)
+// i stoi, gdy hero jest poza ekranem (nie dekoduje klatek pod sceną 3D).
+const section = ref<HTMLElement | null>(null)
+const video = ref<HTMLVideoElement | null>(null)
 const videoSrc = ref('')
 const playing = ref(false)
+let io: IntersectionObserver | undefined
+
 onMounted(() => {
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-  videoSrc.value = window.innerWidth >= 1024 ? hero.video.large : hero.video.small
+  const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || connection?.saveData) return
+
+  const start = () => {
+    videoSrc.value = window.innerWidth >= 1024 ? hero.video.large : hero.video.small
+    io = new IntersectionObserver(([e]) => {
+      const el = video.value
+      if (!el) return
+      if (e?.isIntersecting) el.play().catch(() => {})
+      else el.pause()
+    })
+    if (section.value) io.observe(section.value)
+  }
+  if (document.readyState === 'complete') start()
+  else window.addEventListener('load', start, { once: true })
 })
+onBeforeUnmount(() => io?.disconnect())
 </script>
 
 <template>
-  <section id="top" aria-labelledby="hero-title" class="relative flex min-h-[100svh] flex-col justify-end overflow-hidden bg-ink text-white">
+  <section id="top" ref="section" aria-labelledby="hero-title" class="relative flex min-h-[100svh] flex-col justify-end overflow-hidden bg-ink text-white">
     <NuxtImg
       v-if="hero.image.src"
       :src="hero.image.src"
       :alt="hero.image.alt"
+      format="webp"
+      :quality="70"
       sizes="xs:100vw sm:100vw md:100vw lg:100vw xl:100vw 2xl:100vw"
       loading="eager"
       fetchpriority="high"
@@ -24,6 +46,7 @@ onMounted(() => {
     />
     <video
       v-if="videoSrc"
+      ref="video"
       :src="videoSrc"
       class="absolute inset-0 size-full object-cover transition-opacity duration-1000"
       :class="playing ? 'opacity-100' : 'opacity-0'"

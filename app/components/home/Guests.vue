@@ -31,6 +31,7 @@ const active = ref(0)
           <NuxtImg
             :src="item.image.src"
             :alt="item.image.alt"
+            format="webp"
             sizes="xs:82vw sm:384px lg:50vw"
             loading="lazy"
             class="panel-img absolute inset-0 size-full object-cover"

@@ -15,7 +15,7 @@ import {
   Mesh,
   MeshStandardMaterial,
   NeutralToneMapping,
-  PCFSoftShadowMap,
+  PCFShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
   PMREMGenerator,
@@ -65,6 +65,8 @@ const SHEET_H = 9.05
 const SHEET_FINAL = 1.3 // skala certyfikatu na środku spirali
 const PAD_W = 9 // podstawka pod kartkę
 const PAD_D = 12
+// limit pikseli canvasu (≈ 2560 × 1640): na ekranach 4K/5K i retinie pełne DPR to kilkukrotnie więcej pracy GPU bez widocznej różnicy
+const MAX_PIXELS = 4.2e6
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v))
 // lokalny postęp komórki: kolejne komórki startują z opóźnieniem `order * spread`
@@ -119,12 +121,13 @@ function sampleShots(t: number, key: ShotKey) {
 
 export function createStoryScene(canvas: HTMLCanvasElement, opts: Options) {
   const small = canvas.clientWidth < 700
+  const maxDpr = Math.min(window.devicePixelRatio, small ? 1.5 : 2)
   const renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, small ? 1.5 : 2))
+  renderer.setPixelRatio(maxDpr)
   renderer.outputColorSpace = SRGBColorSpace
   renderer.toneMapping = NeutralToneMapping
   renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = PCFSoftShadowMap
+  renderer.shadowMap.type = PCFShadowMap // PCFSoftShadowMap jest w three r18x wycofany (i tak mapowany na PCF, z ostrzeżeniem)
 
   const scene = new Scene()
   const pmrem = new PMREMGenerator(renderer)
@@ -273,11 +276,18 @@ export function createStoryScene(canvas: HTMLCanvasElement, opts: Options) {
   }
   const reportPage = pageTexture((cv) => drawReport(cv, reportData))
   const certPage = pageTexture((cv) => drawCertificate(cv, opts.certificate))
-  // fonty strony mogą dojść po starcie sceny – wtedy rysujemy kartki jeszcze raz
-  document.fonts?.ready.then(() => {
-    reportPage.redraw()
-    certPage.redraw()
-  })
+  // Kartki używają krojów strony; przeglądarka pobiera dany krój/grubość dopiero, gdy coś go użyje,
+  // więc dociągamy je wprost i rysujemy kartki jeszcze raz. `ready` – kartki są już w docelowych fontach.
+  let dirty = true
+  const ready = Promise.all(
+    ['400 22px Figtree', '500 22px Figtree', '600 22px Figtree', '400 22px "Geist Mono"'].map((f) => document.fonts?.load(f)),
+  )
+    .catch(() => {})
+    .then(() => {
+      reportPage.redraw()
+      certPage.redraw()
+      dirty = true
+    })
 
   const sheet = new Group() // położenie kartki; leży płasko, góra strony (lokalne +Y) wskazuje −Z świata
   const flipper = new Group() // obrót wokół osi góra–dół strony: awers raport → rewers certyfikat
@@ -486,15 +496,35 @@ export function createStoryScene(canvas: HTMLCanvasElement, opts: Options) {
   function resize(w: number, h: number) {
     width = Math.max(1, w)
     height = Math.max(1, h)
+    renderer.setPixelRatio(Math.min(maxDpr, Math.sqrt(MAX_PIXELS / (width * height))))
     renderer.setSize(width, height, false)
     camera.aspect = width / height
     camera.updateProjectionMatrix()
     layoutReport(width / height > 1.25 ? 'side' : 'front')
+    dirty = true
+  }
+
+  // Klatka na żądanie: liczymy i renderujemy tylko, gdy przesunęła się oś czasu, zmienił się rozmiar/tekstury
+  // albo coś rusza się samo w czasie (impulsy na łukach, krążąca spirala). Stojący scroll = zero pracy GPU.
+  let lastT = Number.NaN
+  function frame(st: StoryState, time: number, t: number) {
+    const moving = st.seal > 0 || !!reportLines?.mesh.visible
+    if (!dirty && !moving && t === lastT) {
+      lastTime = time // bez skoku impulsów po wznowieniu
+      return false
+    }
+    update(st, time, t)
+    renderer.render(scene, camera)
+    dirty = false
+    lastT = t
+    return true
   }
 
   return {
     update,
     resize,
+    frame,
+    ready,
     render: () => renderer.render(scene, camera),
     // punkty zaczepienia etykiet HTML: wierzch aktywnego obszaru, wierzch słupków z pinezkami
     areaAnchor: (a: number) => project(areaCenter[a]!.x, areaTop[a]! + 0.3, areaCenter[a]!.z),

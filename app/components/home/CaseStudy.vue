@@ -46,7 +46,7 @@ onBeforeUnmount(() => cleanup())
       <!-- mozaika na wewnętrznej siatce 12 kolumn (zgrywa się z siatką strony) -->
       <div class="col-[2/14] grid grid-cols-12 gap-4 lg:gap-5">
         <figure data-img class="relative col-span-12 m-0 aspect-[4/3] overflow-hidden bg-ink-raised lg:col-span-8 lg:row-span-2 lg:aspect-auto">
-          <NuxtImg :src="img.atrium.src" :alt="img.atrium.alt" sizes="xs:100vw lg:66vw" class="absolute inset-0 size-full scale-[1.15] object-cover" />
+          <NuxtImg :src="img.atrium.src" format="webp" loading="lazy" :alt="img.atrium.alt" sizes="xs:100vw lg:66vw" class="absolute inset-0 size-full scale-[1.15] object-cover" />
         </figure>
 
         <div v-reveal class="col-span-12 flex aspect-[4/3] flex-col justify-between bg-accent p-7 text-ink sm:col-span-6 lg:col-span-4 lg:p-9">
@@ -55,11 +55,11 @@ onBeforeUnmount(() => cleanup())
         </div>
 
         <figure data-img class="relative col-span-12 m-0 aspect-[4/3] overflow-hidden bg-ink-raised sm:col-span-6 lg:col-span-4">
-          <NuxtImg :src="img.room.src" :alt="img.room.alt" sizes="xs:100vw sm:50vw lg:33vw" class="absolute inset-0 size-full scale-[1.15] object-cover" />
+          <NuxtImg :src="img.room.src" format="webp" loading="lazy" :alt="img.room.alt" sizes="xs:100vw sm:50vw lg:33vw" class="absolute inset-0 size-full scale-[1.15] object-cover" />
         </figure>
 
         <figure data-img class="relative col-span-12 m-0 aspect-[3/4] overflow-hidden bg-ink-raised sm:col-span-6 lg:col-span-4">
-          <NuxtImg :src="img.hall.src" :alt="img.hall.alt" sizes="xs:100vw sm:50vw lg:33vw" class="absolute inset-0 size-full scale-[1.15] object-cover" />
+          <NuxtImg :src="img.hall.src" format="webp" loading="lazy" :alt="img.hall.alt" sizes="xs:100vw sm:50vw lg:33vw" class="absolute inset-0 size-full scale-[1.15] object-cover" />
         </figure>
 
         <figure v-reveal class="col-span-12 m-0 flex flex-col justify-between gap-10 bg-ink-raised p-7 sm:col-span-6 lg:col-span-5 lg:p-10">
@@ -72,13 +72,13 @@ onBeforeUnmount(() => cleanup())
         </figure>
 
         <figure data-img class="relative col-span-12 m-0 aspect-[3/4] overflow-hidden bg-ink-raised lg:col-span-3 lg:aspect-auto">
-          <NuxtImg :src="img.restaurant.src" :alt="img.restaurant.alt" sizes="xs:100vw lg:25vw" class="absolute inset-0 size-full scale-[1.15] object-cover" />
+          <NuxtImg :src="img.restaurant.src" format="webp" loading="lazy" :alt="img.restaurant.alt" sizes="xs:100vw lg:25vw" class="absolute inset-0 size-full scale-[1.15] object-cover" />
         </figure>
       </div>
 
       <!-- zamknięcie: zdjęcie na całą szerokość ekranu -->
       <figure data-img class="relative col-[1/15] m-0 h-[60svh] overflow-hidden bg-ink-raised lg:h-[85svh]">
-        <NuxtImg :src="img.lobby.src" :alt="img.lobby.alt" sizes="xs:100vw sm:100vw md:100vw lg:100vw xl:100vw 2xl:100vw" class="absolute inset-0 size-full scale-[1.15] object-cover" />
+        <NuxtImg :src="img.lobby.src" format="webp" loading="lazy" :alt="img.lobby.alt" sizes="xs:100vw sm:100vw md:100vw lg:100vw xl:100vw 2xl:100vw" class="absolute inset-0 size-full scale-[1.15] object-cover" />
       </figure>
     </div>
   </section>

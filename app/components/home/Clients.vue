@@ -18,14 +18,14 @@ const logos = clients.logos.map((logo) => {
         <p class="text-[17px] text-muted-dark">{{ clients.label }}</p>
       </div>
 
-      <!-- Od lg jeden rząd na całą szerokość. Niżej przesuwający się pasek (lista zdublowana, druga kopia ukryta przed czytnikami). -->
-      <div v-reveal class="marquee-wrap col-[1/15] overflow-hidden lg:col-[2/14] lg:overflow-visible">
-        <div class="marquee flex w-max lg:w-auto">
+      <!-- Od xl jeden rząd na całą szerokość (na lg 10 logotypów się nie mieści). Niżej przesuwający się pasek (lista zdublowana, druga kopia ukryta przed czytnikami). -->
+      <div v-reveal class="marquee-wrap col-[1/15] overflow-hidden xl:col-[2/14] xl:overflow-visible">
+        <div class="marquee flex w-max xl:w-auto">
           <ul
             v-for="copy in 2"
             :key="copy"
-            class="flex shrink-0 items-center gap-14 pr-14 lg:w-full lg:justify-between lg:gap-6 lg:pr-0"
-            :class="copy === 2 && 'lg:hidden'"
+            class="flex shrink-0 items-center gap-14 pr-14 xl:w-full xl:justify-between xl:gap-6 xl:pr-0"
+            :class="copy === 2 && 'xl:hidden'"
             :aria-hidden="copy === 2 ? 'true' : undefined"
           >
             <li v-for="logo in logos" :key="logo.name" class="shrink-0">
@@ -35,6 +35,8 @@ const logos = clients.logos.map((logo) => {
                 :width="logo.width"
                 :height="logo.height"
                 densities="x1 x2"
+                fetchpriority="low"
+                decoding="async"
                 class="block opacity-85 brightness-0 invert"
                 :style="{ width: `${logo.width}px`, height: `${logo.height}px` }"
               />
@@ -57,14 +59,14 @@ const logos = clients.logos.map((logo) => {
   }
 }
 
-@media (width >= 64rem) {
+@media (width >= 80rem) {
   .marquee {
     animation: none;
   }
 }
 
 /* Bez animacji pasek da się przewinąć palcem. */
-@media (prefers-reduced-motion: reduce) and (width < 64rem) {
+@media (prefers-reduced-motion: reduce) and (width < 80rem) {
   .marquee-wrap {
     overflow-x: auto;
     scrollbar-width: none;

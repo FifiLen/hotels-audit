@@ -9,8 +9,9 @@ const error = ref('')
 // Na innym hostingu podmień endpoint (Formspree, własna funkcja serverless).
 const submit = async (e: Event) => {
   const form = e.target as HTMLFormElement
-  if (!form.reportValidity()) return
+  if (!form.reportValidity() || sending.value) return
   sending.value = true
+  sent.value = false
   error.value = ''
   try {
     const body = new URLSearchParams(new FormData(form) as unknown as Record<string, string>).toString()

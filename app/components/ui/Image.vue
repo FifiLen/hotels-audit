@@ -21,6 +21,7 @@ const props = withDefaults(
       v-if="props.src"
       :src="props.src"
       :alt="props.alt"
+      format="webp"
       :sizes="props.sizes"
       :loading="props.eager ? 'eager' : 'lazy'"
       :fetchpriority="props.eager ? 'high' : 'auto'"

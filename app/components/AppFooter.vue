@@ -12,12 +12,16 @@ const time = (tz: string) =>
   now.value ? new Intl.DateTimeFormat('pl-PL', { hour: '2-digit', minute: '2-digit', timeZone: tz }).format(now.value) : '--:--'
 
 const mark = ref<HTMLElement | null>(null)
-let timer: ReturnType<typeof setInterval> | undefined
+let timer: ReturnType<typeof setTimeout> | undefined
 let cleanup = () => {}
 
 onMounted(async () => {
-  now.value = new Date()
-  timer = setInterval(() => (now.value = new Date()), 15_000)
+  // odświeżenie równo z pełną minutą (co 15 s zegar potrafił spóźniać się o kilkanaście sekund)
+  const tickClock = () => {
+    now.value = new Date()
+    timer = setTimeout(tickClock, 60_000 - (Date.now() % 60_000) + 50)
+  }
+  tickClock()
 
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches || !mark.value) return
   const [{ gsap }, { ScrollTrigger }] = await Promise.all([import('gsap'), import('gsap/ScrollTrigger')])
@@ -35,7 +39,7 @@ onMounted(async () => {
   }
 })
 onBeforeUnmount(() => {
-  clearInterval(timer)
+  clearTimeout(timer)
   cleanup()
 })
 </script>

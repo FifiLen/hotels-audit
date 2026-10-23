@@ -49,6 +49,13 @@ export default defineNuxtConfig({
     screens: { xs: 320, sm: 640, md: 768, lg: 1024, xl: 1280, '2xl': 1536 },
   },
 
+  // Jedna strona bez nawigacji po stronie klienta: dane zostają w HTML (bez dodatkowego _payload.json przed hydracją)
+  // i bez manifestu aplikacji (zbędne zapytanie o builds/meta).
+  experimental: {
+    payloadExtraction: false,
+    appManifest: false,
+  },
+
   // Pełny SSG: `npm run generate` → .output/public
   nitro: {
     prerender: {

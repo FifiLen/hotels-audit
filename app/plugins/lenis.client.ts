@@ -13,6 +13,18 @@ export default defineNuxtPlugin(() => {
   gsap.ticker.add((time) => lenis.raf(time * 1000))
   gsap.ticker.lagSmoothing(0)
 
+  // ScrollTrigger liczy pozycje raz (load, resize okna). Gdy zmienia się sama wysokość strony – filtr hoteli,
+  // dociągnięte fonty – triggery niżej zostają w starym miejscu (np. stopka nigdy się nie odsłania). Odświeżamy je.
+  let height = 0
+  let refresh: ReturnType<typeof setTimeout> | undefined
+  new ResizeObserver(([entry]) => {
+    const h = Math.round(entry?.contentRect.height ?? 0)
+    if (!height || h === height) return void (height = h)
+    height = h
+    clearTimeout(refresh)
+    refresh = setTimeout(() => ScrollTrigger.refresh(), 150)
+  }).observe(document.body)
+
   // Linki #kotwica: bez natywnego skoku i bez popstate (vue-router przewijałby drugi raz po swojemu).
   // Przewijamy w następnej klatce, żeby zamknięte menu mobilne zdążyło zniknąć z układu.
   document.addEventListener('click', (e) => {

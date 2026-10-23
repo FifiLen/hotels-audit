@@ -15,27 +15,29 @@ const canvas = ref<HTMLCanvasElement | null>(null)
 const areaLabel = ref<HTMLElement | null>(null)
 const pinLabels = ref<HTMLElement[]>([])
 const reportLabel = ref<HTMLElement | null>(null)
+// Rozdziały i odcinki skali: krycie i przesunięcie wpisuje sync() wprost do style, bez przerysowywania komponentu co klatkę.
+// Stan z SSR (ukryte rozdziały, puste odcinki) siedzi w klasach – inline style z sync() je nadpisuje, a Vue go nie rusza.
+const chapterEls: HTMLElement[] = []
+const segmentEls: HTMLElement[] = []
 
 const chapter = ref(0)
 const areaIndex = ref(-1)
-const progress = ref(0)
 const reduced = ref(false)
 const webgl = ref(true)
 
 // Teksty rozdziałów wygasają i wchodzą w rytm scrolla: stary znika w ostatnich FADE jednostkach rozdziału,
 // nowy pojawia się w pierwszych FADE – na granicy oba mają 0, więc nigdy na siebie nie nachodzą.
 const FADE = 0.35
-const chapterFx = ref(story.chapters.map((_, i) => ({ opacity: i === 0 ? 1 : 0, y: 0 })))
 const zakresTop = `${(CHAPTER_STARTS[2]! / END) * 100}%`
 const activeArea = computed(() => story.areas[Math.max(0, areaIndex.value)]!)
 
 // wypełnienie odcinka skali: poprzednie pełne, aktywny według postępu w rozdziale, dalsze puste
-const segmentFill = (i: number) => {
-  if (i < chapter.value) return 1
-  if (i > chapter.value) return 0
+const segmentFill = (i: number, ch: number, t: number) => {
+  if (i < ch) return 1
+  if (i > ch) return 0
   const start = CHAPTER_STARTS[i]!
   const end = CHAPTER_STARTS[i + 1] ?? END
-  return Math.min(1, Math.max(0, (progress.value * END - start) / (end - start)))
+  return Math.min(1, Math.max(0, (t - start) / (end - start)))
 }
 
 let cleanup = () => {}
@@ -45,40 +47,55 @@ onMounted(async () => {
   const state: StoryState = { reveal: 0, lit: 0, areas: 0, flaws: 0, fix: 0, seal: 0 }
 
   let scene: ReturnType<typeof import('~/lib/storyScene').createStoryScene> | null = null
-  try {
-    const { createStoryScene } = await import('~/lib/storyScene')
-    scene = createStoryScene(canvas.value!, {
-      areas: story.areas,
-      report: story.report,
-      certificate: { ...story.certificate, ...story.seal },
-      accent: '#ff6b2c',
-      ink: '#0e1a2b',
-      base: '#d7dce3',
-      lit: '#ffffff',
-    })
-  } catch {
-    webgl.value = false
-  }
-
+  let disposed = false
   const resize = () => {
     if (!scene || !canvas.value) return
     scene.resize(canvas.value.clientWidth, canvas.value.clientHeight)
+    if (reduced.value) scene.frame(state, 0, 4)
   }
   const ro = new ResizeObserver(resize)
   if (canvas.value) ro.observe(canvas.value)
-  resize()
+
+  // three.js (~140 kB gzip) i budowa sceny to sporo pracy – nie w trakcie ładowania strony,
+  // tylko w wolnej chwili albo od razu, gdy sekcja zbliża się do ekranu.
+  let loading: Promise<void> | null = null
+  const loadScene = () =>
+    (loading ??= (async () => {
+      try {
+        const { createStoryScene } = await import('~/lib/storyScene')
+        if (disposed || !canvas.value) return
+        scene = createStoryScene(canvas.value, {
+          areas: story.areas,
+          report: story.report,
+          certificate: { ...story.certificate, ...story.seal },
+          accent: '#ff6b2c',
+          ink: '#0e1a2b',
+          base: '#d7dce3',
+          lit: '#ffffff',
+        })
+        resize()
+      } catch {
+        webgl.value = false
+      }
+    })())
 
   // Bez animacji: statyczny widok z kolorami obszarów, rozdziały jeden pod drugim.
   if (reduced.value) {
     Object.assign(state, { reveal: 1, lit: 1, areas: 5 })
-    scene?.update(state, 0, 4)
-    scene?.render()
     cleanup = () => {
+      disposed = true
       ro.disconnect()
       scene?.dispose()
     }
+    await loadScene()
+    scene?.ready.then(() => scene?.frame(state, 0, 4))
     return
   }
+
+  if ('requestIdleCallback' in window) requestIdleCallback(() => loadScene(), { timeout: 2500 })
+  else setTimeout(loadScene, 300)
+  const near = new IntersectionObserver(([e]) => e?.isIntersecting && loadScene(), { rootMargin: '50% 0px' })
+  if (section.value) near.observe(section.value)
 
   const [{ gsap }, { ScrollTrigger }] = await Promise.all([import('gsap'), import('gsap/ScrollTrigger')])
   gsap.registerPlugin(ScrollTrigger)
@@ -92,6 +109,7 @@ onMounted(async () => {
     .to(state, { seal: 1, duration: PHASES.seal[1], ease: 'power1.inOut' }, PHASES.seal[0])
     .set({}, {}, END)
 
+  const fx = story.chapters.map((_, i) => (i === 0 ? 1 : 0))
   const sync = () => {
     const t = tl.time()
     let ch = 0
@@ -100,15 +118,20 @@ onMounted(async () => {
     })
     chapter.value = ch
     areaIndex.value = ch === 2 ? Math.min(story.areas.length - 1, Math.floor(state.areas)) : -1
-    chapterFx.value = story.chapters.map((_, i) => {
-      const start = CHAPTER_STARTS[i]!
+    CHAPTER_STARTS.forEach((start, i) => {
       const end = CHAPTER_STARTS[i + 1] ?? Infinity
       const fadeIn = i === 0 ? 1 : Math.min(1, Math.max(0, (t - start) / FADE))
       const fadeOut = Math.min(1, Math.max(0, (end - t) / FADE))
-      // wchodzi od dołu, wychodzi do góry
-      return { opacity: fadeIn * fadeOut, y: (1 - fadeIn) * 18 - (1 - fadeOut) * 18 }
+      fx[i] = fadeIn * fadeOut
+      const el = chapterEls[i]
+      if (el) {
+        el.style.opacity = String(fx[i])
+        // wchodzi od dołu, wychodzi do góry
+        el.style.transform = `translateY(${(1 - fadeIn) * 18 - (1 - fadeOut) * 18}px)`
+      }
+      const seg = segmentEls[i]
+      if (seg) seg.style.transform = `scaleX(${segmentFill(i, ch, t)})`
     })
-    progress.value = t / END
   }
   tl.eventCallback('onUpdate', sync)
   sync()
@@ -132,11 +155,11 @@ onMounted(async () => {
   }
   const tick = (time: number) => {
     if (!visible || !scene) return
-    scene.update(state, time, tl.time())
-    scene.render()
+    // nic się nie zmieniło od ostatniej klatki – scena i etykiety stoją
+    if (!scene.frame(state, time, tl.time())) return
     // etykiety przypięte do makiety: nad aktywnym obszarem (Zakres) i nad słupkami do poprawy (Raport)
     const a = scene.areaAnchor(Math.max(0, areaIndex.value))
-    place(areaLabel.value, a.x, a.y, a.visible ? chapterFx.value[2]!.opacity : 0)
+    place(areaLabel.value, a.x, a.y, a.visible ? fx[2]! : 0)
     const pinsOn = Math.min(1, Math.max(0, (scene.flawLevel() - 0.6) / 0.4))
     scene.pinAnchors().forEach((pin, n) => place(pinLabels.value[n], pin.x, pin.y, pin.visible ? pinsOn : 0))
     const r = scene.reportAnchor()
@@ -145,10 +168,12 @@ onMounted(async () => {
   gsap.ticker.add(tick)
 
   cleanup = () => {
+    disposed = true
     gsap.ticker.remove(tick)
     trigger.kill()
     tl.kill()
     io.disconnect()
+    near.disconnect()
     ro.disconnect()
     scene?.dispose()
   }
@@ -182,8 +207,8 @@ onBeforeUnmount(() => cleanup())
             v-for="(c, i) in story.chapters"
             :key="c.step"
             class="flex flex-col items-center gap-3 [grid-area:1/1] lg:gap-4"
-            :class="!reduced && i !== chapter && 'pointer-events-none'"
-            :style="reduced ? undefined : { opacity: chapterFx[i]!.opacity, transform: `translateY(${chapterFx[i]!.y}px)` }"
+            :ref="(el) => (chapterEls[i] = el as HTMLElement)"
+            :class="!reduced && [i !== chapter && 'pointer-events-none', i !== 0 && 'opacity-0']"
             :aria-hidden="!reduced && i !== chapter ? 'true' : undefined"
           >
             <p v-if="reduced" class="font-mono text-xs text-muted">{{ String(i + 1).padStart(2, '0') }} · {{ c.step }}</p>
@@ -279,8 +304,8 @@ onBeforeUnmount(() => cleanup())
           <li v-for="(c, i) in story.chapters" :key="c.step" class="flex flex-col gap-2.5">
             <span class="h-0.5 overflow-hidden bg-line">
               <span
-                class="block h-full origin-left bg-accent transition-transform duration-300"
-                :style="{ transform: `scaleX(${segmentFill(i)})` }"
+                :ref="(el) => (segmentEls[i] = el as HTMLElement)"
+                class="block h-full origin-left bg-accent transition-transform duration-300 [transform:scaleX(0)]"
               />
             </span>
             <span

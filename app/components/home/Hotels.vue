@@ -126,6 +126,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
                 <NuxtImg
                   :src="h.image.src"
                   :alt="h.image.alt"
+                  format="webp"
                   sizes="xs:100vw sm:50vw lg:25vw"
                   loading="lazy"
                   class="absolute inset-0 size-full object-cover transition-transform duration-1000 ease-out-quint group-hover:scale-105"

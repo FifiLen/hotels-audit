@@ -10,8 +10,12 @@ const { $lenis } = useNuxtApp()
 
 const links = [...nav, { label: contact.label, href: '#kontakt' }]
 
+// strona pod otwartym panelem jest nieaktywna: Tab nie ucieka za przyciemnienie, „/” nie łapie pola wyszukiwania
+const setPageInert = (value: boolean) => document.querySelectorAll<HTMLElement>('main, footer').forEach((el) => (el.inert = value))
+
 function setOpen(value: boolean) {
   open.value = value
+  setPageInert(value)
   if (value) {
     $lenis?.stop()
     nextTick(() => panel.value?.querySelector<HTMLElement>('a')?.focus({ preventScroll: true }))
@@ -45,7 +49,10 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKey)
   window.removeEventListener('scroll', checkTheme)
-  if (open.value) $lenis?.start()
+  if (open.value) {
+    $lenis?.start()
+    setPageInert(false)
+  }
 })
 </script>
 
