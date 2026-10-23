@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+/* ───────── Tokeny ───────── */
+@theme {
+  /* Pliki fontów dociąga @nuxt/fonts (nuxt.config.ts → fonts). Display = nagłówki i duże liczby. */
+  --font-sans: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-sans);
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --color-ink: #0e1a2b;        /* granat – tekst i ciemne sekcje */
+  --color-ink-raised: #16243a; /* podniesiona powierzchnia na ciemnym */
+  --color-line-dark: #26354c;
+  --color-paper: #f4f5f6;      /* tło strony */
+  --color-line: #d9dce0;
+  --color-muted: #4a5361;      /* tekst drugorzędny na jasnym */
+  --color-muted-dark: #a7b1c2; /* tekst drugorzędny na ciemnym */
+  --color-quiet: #737b88;      /* przygaszony fragment dużego tekstu */
+  --color-placeholder: #c9cdd3;
+  --color-accent: #ff6b2c;
+
+  /* skala typograficzna – tracking dobrany pod Figtree (luźniej niż pod Geist, żeby „rt”, „fi” się nie sklejały) */
+  --text-h2: clamp(2.5rem, 4.6vw, 4.25rem);
+  --text-h2--line-height: 0.98;
+  --text-h2--letter-spacing: -0.03em;
+
+  --text-lead: clamp(1.75rem, 3.4vw, 3.125rem);
+  --text-lead--line-height: 1.14;
+  --text-lead--letter-spacing: -0.025em;
+
+  --text-figure: clamp(5.5rem, 10vw, 10rem);
+  --text-figure--line-height: 0.82;
+  --text-figure--letter-spacing: -0.045em;
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ───────── 12 kolumn na pełną szerokość + 20 px marginesu po bokach ─────────
+   Linie: 1 = lewa krawędź, 2–13 = kolumny treści, 14 = koniec treści, 15 = prawa krawędź.
+   Na mobile wszystko leży w 2/14, bleed w 2/15 albo 1/15. */
+@utility grid-site {
+  display: grid;
+  grid-template-columns:
+    1.25rem
+    repeat(12, minmax(0, 1fr))
+    1.25rem;
+  column-gap: 0;
+
+  /* Od lg margines robi sam odstęp kolumn (20 px), boczne tory mają 0 – dalej 20 px od krawędzi. */
+  @media (width >= 64rem) {
+    grid-template-columns: 0 repeat(12, minmax(0, 1fr)) 0;
+    column-gap: 1.25rem;
+  }
+}
+
+@utility rail {
+  display: flex;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  & > * {
+    scroll-snap-align: start;
+  }
+}
+
+/* ───────── Baza ───────── */
+@layer base {
+  html {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    /* płynne przewijanie robi Lenis (plugins/lenis.client.ts) – natywne scroll-behavior: smooth by z nim walczyło */
+    scroll-padding-top: 0; /* nagłówek to tylko pływający napis i przycisk menu – nie zasłania sekcji */
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.55;
+    font-feature-settings: "ss01", "tnum" 0;
+    overflow-x: clip;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+  }
+
+  ::selection {
+    background: var(--color-accent);
+    color: var(--color-ink);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      transition-delay: 0ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+}
