@@ -7,10 +7,14 @@ import type { StoryState } from '~/lib/storyScene'
 // Jednostki osi czasu – fazy sceny i początki rozdziałów:
 const PHASES = { reveal: [0, 0.8], lit: [1, 1], areas: [2.2, 3], flaws: [5.5, 0.8], fix: [6.8, 0.8], seal: [8, 1.4] } as const
 const CHAPTER_STARTS = [0, 1, 2.2, 5.35, 6.65, 7.9]
+// kliknięcie w krok skali przewija do chwili, w której rozdział jest „ustawiony” (scena po swojej fazie)
+const CHAPTER_TARGETS = [0.65, 1.85, 2.55, 6.3, 7.55, 10]
 const END = 10
 
 const section = ref<HTMLElement | null>(null)
 const stage = ref<HTMLElement | null>(null)
+const copy = ref<HTMLElement | null>(null)
+const scale = ref<HTMLElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
 const areaLabel = ref<HTMLElement | null>(null)
 const pinLabels = ref<HTMLElement[]>([])
@@ -40,6 +44,17 @@ const segmentFill = (i: number, ch: number, t: number) => {
   return Math.min(1, Math.max(0, (t - start) / (end - start)))
 }
 
+const { $lenis } = useNuxtApp()
+const goTo = (i: number) => {
+  const el = section.value
+  if (!el) return
+  const top = el.getBoundingClientRect().top + window.scrollY
+  const y = top + (CHAPTER_TARGETS[i]! / END) * (el.offsetHeight - window.innerHeight)
+  const duration = Math.min(2, 0.7 + (Math.abs(y - window.scrollY) / window.innerHeight) * 0.2)
+  if ($lenis) $lenis.scrollTo(y, { duration })
+  else window.scrollTo({ top: y, behavior: 'smooth' })
+}
+
 let cleanup = () => {}
 
 onMounted(async () => {
@@ -48,9 +63,19 @@ onMounted(async () => {
 
   let scene: ReturnType<typeof import('~/lib/storyScene').createStoryScene> | null = null
   let disposed = false
+  // wolny pas na makietę: między dołem opisów a górą skali (liczony przy zmianie rozmiaru widoku, nie przy zmianie tekstu,
+  // żeby kadr nie skakał między obszarami w „Zakresie”)
+  const insets = () => {
+    if (reduced.value || !stage.value || !copy.value || !scale.value) return { top: 0, bottom: 0 }
+    const box = stage.value.getBoundingClientRect()
+    return {
+      top: copy.value.getBoundingClientRect().bottom - box.top + 8,
+      bottom: box.bottom - scale.value.getBoundingClientRect().top + 8,
+    }
+  }
   const resize = () => {
     if (!scene || !canvas.value) return
-    scene.resize(canvas.value.clientWidth, canvas.value.clientHeight)
+    scene.resize(canvas.value.clientWidth, canvas.value.clientHeight, insets())
     if (reduced.value) scene.frame(state, 0, 4)
   }
   const ro = new ResizeObserver(resize)
@@ -194,21 +219,21 @@ onBeforeUnmount(() => cleanup())
     <!-- kotwica „Zakres audytu” wskazuje miejsce w scrollu, gdzie zaczyna się ten rozdział -->
     <span id="zakres" class="absolute left-0 h-px w-px" :style="{ top: reduced ? '0' : zakresTop }" aria-hidden="true" />
 
-    <!-- przyklejony widok: opisy u góry, scena na środku, skala na dole -->
+    <!-- przyklejony widok: scena na cały ekran, na niej opisy u góry i skala na dole (na szkle) -->
     <div
       ref="stage"
       class="grid-site"
       :class="reduced ? 'gap-y-12' : 'sticky top-0 h-svh grid-rows-[auto_minmax(0,1fr)_auto] gap-y-4 pt-20 pb-6 lg:pt-24 lg:pb-8'"
     >
       <!-- 1. opisy -->
-      <div class="col-[2/14] flex flex-col items-center text-center">
+      <div ref="copy" class="relative z-10 col-[2/14] flex flex-col items-center text-center">
         <ol :class="reduced ? 'flex flex-col gap-16' : 'grid w-full max-w-6xl'">
           <li
             v-for="(c, i) in story.chapters"
             :key="c.step"
-            class="flex flex-col items-center gap-3 [grid-area:1/1] lg:gap-4"
+            class="flex flex-col items-center gap-3 lg:gap-4"
             :ref="(el) => (chapterEls[i] = el as HTMLElement)"
-            :class="!reduced && [i !== chapter && 'pointer-events-none', i !== 0 && 'opacity-0']"
+            :class="!reduced && ['glass [grid-area:1/1] self-start justify-self-center px-5 py-5 lg:px-10 lg:py-7', i !== chapter && 'pointer-events-none', i !== 0 && 'opacity-0']"
             :aria-hidden="!reduced && i !== chapter ? 'true' : undefined"
           >
             <p v-if="reduced" class="font-mono text-xs text-muted">{{ String(i + 1).padStart(2, '0') }} · {{ c.step }}</p>
@@ -255,8 +280,8 @@ onBeforeUnmount(() => cleanup())
         </ol>
       </div>
 
-      <!-- 2. scena na całą szerokość -->
-      <div class="relative col-[1/15] min-h-0" :class="reduced && 'h-[60svh]'">
+      <!-- 2. scena: bez animacji w treści, z animacją pod całym widokiem -->
+      <div :class="reduced ? 'relative col-[1/15] h-[60svh]' : 'absolute inset-0'">
         <canvas v-show="webgl" ref="canvas" class="absolute inset-0 block size-full" aria-hidden="true" />
 
         <!-- etykiety przypięte do makiety (pozycję i krycie ustawia tick, poza Vue) -->
@@ -299,22 +324,32 @@ onBeforeUnmount(() => cleanup())
       </div>
 
       <!-- 3. skala: 6 odcinków z nazwami kroków, licznik punktów -->
-      <div v-if="!reduced" class="col-[2/14]">
-        <ol class="grid grid-cols-6 gap-1.5" aria-hidden="true">
-          <li v-for="(c, i) in story.chapters" :key="c.step" class="flex flex-col gap-2.5">
-            <span class="h-0.5 overflow-hidden bg-line">
+      <!-- kroki da się też kliknąć – przewijają do danego rozdziału -->
+      <div v-if="!reduced" ref="scale" class="glass relative z-10 col-[2/14] row-start-3 px-4 pt-1 pb-3 lg:px-5 lg:pb-2">
+        <ol class="grid grid-cols-6 gap-1.5" aria-label="Kroki certyfikacji">
+          <li v-for="(c, i) in story.chapters" :key="c.step">
+            <button
+              type="button"
+              class="group flex w-full flex-col gap-2.5 pt-3 pb-1 text-left"
+              :aria-label="`Krok ${i + 1}: ${c.step}`"
+              :aria-current="i === chapter ? 'step' : undefined"
+              @click="goTo(i)"
+            >
+              <span class="h-0.5 w-full overflow-hidden bg-line transition-colors duration-300 group-hover:bg-ink/25">
+                <span
+                  :ref="(el) => (segmentEls[i] = el as HTMLElement)"
+                  class="block h-full origin-left bg-accent transition-transform duration-300 [transform:scaleX(0)]"
+                />
+              </span>
               <span
-                :ref="(el) => (segmentEls[i] = el as HTMLElement)"
-                class="block h-full origin-left bg-accent transition-transform duration-300 [transform:scaleX(0)]"
-              />
-            </span>
-            <span
-              class="truncate font-mono text-xs transition-colors duration-300 max-lg:hidden"
-              :class="i === chapter ? 'text-ink' : 'text-muted'"
-            >{{ String(i + 1).padStart(2, '0') }} {{ c.step }}</span>
+                class="truncate font-mono text-xs transition-colors duration-300 group-hover:text-ink max-lg:hidden"
+                :class="i === chapter ? 'text-ink' : 'text-muted'"
+                aria-hidden="true"
+              >{{ String(i + 1).padStart(2, '0') }} {{ c.step }}</span>
+            </button>
           </li>
         </ol>
-        <p class="mt-2.5 text-center font-mono text-xs lg:hidden" aria-hidden="true">
+        <p class="mt-1.5 text-center font-mono text-xs lg:hidden" aria-hidden="true">
           {{ String(chapter + 1).padStart(2, '0') }} {{ story.chapters[chapter]!.step }}
         </p>
         <p class="sr-only" aria-live="polite">Krok {{ chapter + 1 }} z {{ story.chapters.length }}: {{ story.chapters[chapter]!.step }}</p>
@@ -322,3 +357,12 @@ onBeforeUnmount(() => cleanup())
     </div>
   </section>
 </template>
+
+<style scoped>
+/* szkło nad sceną: bez ramek, rozmyte tło strony – teksty czytelne, a makieta pod nimi nie jest ucinana */
+.glass {
+  background: rgb(244 245 246 / 0.62);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  backdrop-filter: blur(14px) saturate(1.1);
+}
+</style>

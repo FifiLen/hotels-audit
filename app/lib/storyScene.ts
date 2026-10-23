@@ -343,6 +343,7 @@ export function createStoryScene(canvas: HTMLCanvasElement, opts: Options) {
 
   let width = 1
   let height = 1
+  let viewH = 1 // wysokość wolnego pasa między tekstem a skalą – w nim kadrujemy makietę
   const areaTop = new Float32Array(opts.areas.length)
   let pinTop = 0
   let padOn = 0
@@ -433,7 +434,7 @@ export function createStoryScene(canvas: HTMLCanvasElement, opts: Options) {
     reportLabelOn = sheetOn * (1 - smooth(0, 0.15, st.seal))
 
     // kamera: tor ujęć, w „Zakresie” cel podąża za aktywnym obszarem, na końcu prawie z góry na pieczęć
-    const aspect = width / height
+    const aspect = width / viewH
     const vFov = MathUtils.degToRad(camera.fov)
     const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect)
     const fit = (w: number, hh: number) => Math.max(w / 2 / Math.tan(hFov / 2), hh / 2 / Math.tan(vFov / 2)) + 2
@@ -493,14 +494,24 @@ export function createStoryScene(canvas: HTMLCanvasElement, opts: Options) {
     }
   }
 
-  function resize(w: number, h: number) {
+  // Canvas zajmuje cały widok, ale u góry i u dołu leżą na nim teksty (insets, px). Kamera kadruje makietę w wolnym pasie
+  // między nimi, a canvas pokazuje też to, co poza nim – wysunięte słupki, łuki i spirala prześwitują przez teksty zamiast się ucinać.
+  function resize(w: number, h: number, insets = { top: 0, bottom: 0 }) {
     width = Math.max(1, w)
     height = Math.max(1, h)
+    let { top, bottom } = insets
+    const minView = height * 0.4 // wysokie teksty (telefon) nie mogą ścisnąć makiety do paska
+    if (height - top - bottom < minView && top + bottom > 0) {
+      const k = (height - minView) / (top + bottom)
+      top *= k
+      bottom *= k
+    }
+    viewH = Math.max(1, height - top - bottom)
     renderer.setPixelRatio(Math.min(maxDpr, Math.sqrt(MAX_PIXELS / (width * height))))
     renderer.setSize(width, height, false)
-    camera.aspect = width / height
+    camera.setViewOffset(width, viewH, 0, -top, width, height) // ustawia też aspect = width / viewH
     camera.updateProjectionMatrix()
-    layoutReport(width / height > 1.25 ? 'side' : 'front')
+    layoutReport(width / viewH > 1.25 ? 'side' : 'front')
     dirty = true
   }
 
